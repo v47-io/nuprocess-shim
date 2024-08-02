@@ -1,0 +1,22 @@
+[versions]
+detekt = "1.23.6"
+dokka = "1.9.20"
+junitJupiter = "5.10.3"
+license = "0.16.1"
+logback = "1.5.6"
+release = "3.0.2"
+remal-gradle-plugins = "1.9.2"
+slf4j = "2.0.13"
+
+[libraries]
+junitApi = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junitJupiter" }
+junitEngine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junitJupiter" }
+logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+remalGradlePlugins = { module = "name.remal:gradle-plugins", version.ref = "remal-gradle-plugins" }
+slf4j = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+
+[plugins]
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
+license = { id = "com.github.hierynomus.license", version.ref = "license" }
+release = { id = "net.researchgate.release", version.ref = "release" }

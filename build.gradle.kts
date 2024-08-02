@@ -28,8 +28,8 @@ plugins {
 dependencies {
     implementation(libs.slf4j)
 
-    testImplementation(libs.junitApi)
-    testRuntimeOnly(libs.junitEngine)
+    testImplementation(libs.hamcrest)
+    testImplementation(libs.junit)
     testRuntimeOnly(libs.logback)
 }
 
@@ -38,7 +38,7 @@ kotlin {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnit()
 }
 
 jacoco {
@@ -65,6 +65,8 @@ val javadocJar by tasks.register<Jar>("javadocJar") {
 }
 
 license {
+    exclude("**/*.exe")
+
     header = file("LICENSE")
     skipExistingHeaders = true
 
@@ -133,6 +135,7 @@ if (!ossrhUser.isNullOrBlank() && !ossrhPass.isNullOrBlank() && !"${project.vers
 
     publishing {
         repositories {
+            @Suppress("DEPRECATION")
             withConvention(RepositoryHandlerOssrhExtension::class) {
                 ossrh {
                     credentials {

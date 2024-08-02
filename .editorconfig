@@ -1,0 +1,9 @@
+root = true
+
+[*.java]
+charset = utf-8
+end_of_line = lf
+indent_size = 3
+ij_java_class_brace_style = next_line
+ij_java_method_brace_style = next_line
+ij_java_doc_do_not_wrap_if_one_line = true

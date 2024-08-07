@@ -56,7 +56,7 @@ repositories {
 }
 
 dependencies {
-    implementation("io.v47:nuprocess-shim:0.0.0-SNAPSHOT")
+    implementation("io.v47:nuprocess-shim:2.0.0")
 }
 ```
 

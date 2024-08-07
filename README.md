@@ -6,7 +6,7 @@
 
 [workflow-shield]: https://img.shields.io/github/actions/workflow/status/v47-io/nuprocess-shim/build.yml?branch=main
 [maven-shield]: https://img.shields.io/maven-central/v/io.v47/nuprocess-shim
-[maven-central]: https://central.sonatype.com/namespace/io.v47/nuprocess-shim
+[maven-central]: https://central.sonatype.com/artifact/io.v47/nuprocess-shim
 [license-shield]: https://img.shields.io/github/license/v47-io/nuprocess-shim
 
 > A poor man's masquerade of the Java Process API pretending to be a low-overhead,

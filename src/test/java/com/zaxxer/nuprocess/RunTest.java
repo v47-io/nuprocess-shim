@@ -237,7 +237,6 @@ public class RunTest
          public void onStdout(ByteBuffer buffer, boolean closed)
          {
             callbacks.add("stdout");
-            nuProcess.closeStdin(true);
          }
 
          @Override
@@ -245,6 +244,8 @@ public class RunTest
          {
             callbacks.add("stdin");
             buffer.put("foobar".getBytes()).flip();
+
+            nuProcess.closeStdin(false);
             return false;
          }
 
@@ -421,9 +422,6 @@ public class RunTest
       public void onStdout(ByteBuffer buffer, boolean closed)
       {
          size += buffer.remaining();
-         if (size == (WRITES * bytes.length)) {
-            nuProcess.closeStdin(true);
-         }
 
          byte[] bytes = new byte[buffer.remaining()];
          buffer.get(bytes);
@@ -438,7 +436,12 @@ public class RunTest
          buffer.put(bytes);
          buffer.flip();
 
-         return (++writes < WRITES);
+         boolean writesPending = ++writes < WRITES;
+         if (!writesPending) {
+            nuProcess.closeStdin(false);
+         }
+
+         return writesPending;
       }
 
       int getExitCode()
@@ -497,10 +500,6 @@ public class RunTest
          charsRead += buffer.remaining();
          decodedStdout.append(buffer);
          buffer.position(buffer.limit());
-
-         if (forceCloseStdin && charsRead == charsWritten) {
-            nuProcess.closeStdin(true);
-         }
       }
 
       @Override
@@ -510,9 +509,9 @@ public class RunTest
             charsWritten += utf8Buffer.remaining();
             buffer.put(utf8Buffer);
             buffer.flip();
-            if (!forceCloseStdin) {
-               nuProcess.closeStdin(false);
-            }
+
+            nuProcess.closeStdin(false);
+
             return false;
          }
          else {

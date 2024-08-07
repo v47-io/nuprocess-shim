@@ -32,66 +32,21 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-package io.v47.nuprocess.shim
+package io.v47.nuprocess.shim.utils
 
-import com.zaxxer.nuprocess.NuProcess
-import com.zaxxer.nuprocess.NuProcessFactory
-import com.zaxxer.nuprocess.NuProcessHandler
-import java.nio.file.Path
-import java.util.concurrent.ThreadFactory
+private const val DEFAULT_LINGER_TIME_MS = 2500
 
-internal class ShimProcessFactory : NuProcessFactory {
-    private val threadFactory: ThreadFactory = Thread.ofVirtual().name("nuprocess-shim-", 0).factory()
+internal object Constants {
+    val BUFFER_SIZE = UShort.MAX_VALUE.toInt()
+    val LINGER_TIME_MS = computeLingerTime()
+}
 
-    override fun createProcess(
-        commands: MutableList<String>,
-        env: Array<out String>,
-        processListener: NuProcessHandler?,
-        cwd: Path?
-    ): NuProcess {
-        val proc = ShimProcess(threadFactory, processListener)
+private fun computeLingerTime(): Int {
+    val setting = System.getProperty("com.zaxxer.nuprocess.lingerTimeMs", "2500")
+    val settingAsInt = setting.toIntOrNull()
 
-        runCatching {
-            proc.start(createProcessBuilder(commands, env, cwd))
-        }.onFailure { _ ->
-            proc.cleanup()
-        }
-
-        return proc
-    }
-
-    override fun runProcess(
-        commands: MutableList<String>,
-        env: Array<out String>,
-        processListener: NuProcessHandler?,
-        cwd: Path?
-    ) {
-        val proc = ShimProcess(threadFactory, processListener)
-
-        runCatching {
-            proc.run(createProcessBuilder(commands, env, cwd))
-        }.onFailure {
-            proc.cleanup()
-        }.getOrThrow()
-    }
-
-    private fun createProcessBuilder(
-        commands: List<String>,
-        env: Array<out String>,
-        cwd: Path?
-    ) =
-        ProcessBuilder().apply {
-            command(commands)
-
-            environment().clear()
-            environment().putAll(
-                env.associate { keyVal ->
-                    val splitVal = keyVal.split('=', limit = 2)
-                    splitVal[0] to splitVal[1]
-                }
-            )
-
-            if (cwd != null)
-                directory(cwd.toFile())
-        }
+    return if (settingAsInt != null && settingAsInt > 0)
+        settingAsInt
+    else
+        DEFAULT_LINGER_TIME_MS
 }

@@ -188,6 +188,8 @@ public class DirectWriteTest
 
          System.out.println("Writing: This is a test");
          nuProcess.writeStdin(buffer);
+
+         nuProcess.closeStdin(false);
       }
 
       @Override
@@ -198,7 +200,6 @@ public class DirectWriteTest
             result = new String(chars);
             System.out.println("Read: " + result);
          }
-         nuProcess.closeStdin(true);
       }
    }
 
@@ -224,6 +225,8 @@ public class DirectWriteTest
 
          System.out.println("Writing: 128K of data, waiting for checksum " + checksum);
          nuProcess.writeStdin(buffer);
+
+         nuProcess.closeStdin(false);
       }
 
       @Override
@@ -236,7 +239,6 @@ public class DirectWriteTest
          System.out.println("Reading.  Current checksum " + checksum2);
          if (checksum2 == checksum) {
             System.out.println("Checksums matched, exiting.");
-            nuProcess.closeStdin(true);
          }
       }
    }

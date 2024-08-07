@@ -188,7 +188,13 @@ public class ThreadedTest
       {
          buffer.put(bytes);
          buffer.flip();
-         return (++writes < WRITES);
+
+         boolean writesRequired = ++writes < WRITES;
+         if (!writesRequired) {
+            nuProcess.closeStdin(false);
+         }
+
+         return writesRequired;
       }
 
       int getExitCode()

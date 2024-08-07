@@ -117,7 +117,7 @@ public class CatTest
       Semaphore semaphore = new Semaphore(0);
       String SHORT_UNICODE_TEXT = "Hello \uD83D\uDCA9 world";
       System.err.println("Starting test decodingShortUtf8Data()");
-      Utf8DecodingListener processListener = new Utf8DecodingListener(semaphore, SHORT_UNICODE_TEXT, true);
+      Utf8DecodingListener processListener = new Utf8DecodingListener(semaphore, SHORT_UNICODE_TEXT, false);
       NuProcessBuilder pb = new NuProcessBuilder(processListener, command);
       pb.start();
       semaphore.acquireUninterruptibly();
@@ -138,10 +138,11 @@ public class CatTest
          unicodeTextWhichDoesNotFitInBuffer.append(THREE_BYTE_UTF_8);
       }
       System.err.println("Starting test decodingLongUtf8Data()");
-      Utf8DecodingListener processListener = new Utf8DecodingListener(semaphore, unicodeTextWhichDoesNotFitInBuffer.toString(), true);
+      Utf8DecodingListener processListener = new Utf8DecodingListener(semaphore, unicodeTextWhichDoesNotFitInBuffer.toString(), false);
       NuProcessBuilder pb = new NuProcessBuilder(processListener, command);
       pb.start();
       semaphore.acquireUninterruptibly();
+      Assert.assertEquals("Decoding length mismatch", unicodeTextWhichDoesNotFitInBuffer.length(), processListener.decodedStdout.length());
       Assert.assertEquals("Decoding mismatch", unicodeTextWhichDoesNotFitInBuffer.toString(), processListener.decodedStdout.toString());
       Assert.assertEquals("Exit code mismatch", 0, processListener.exitCode);
       Assert.assertTrue("Decoder stdin should overflow", processListener.stdinOverflow);
@@ -217,7 +218,6 @@ public class CatTest
          public void onStdout(ByteBuffer buffer, boolean closed)
          {
             callbacks.add("stdout");
-            nuProcess.closeStdin(true);
          }
 
          @Override
@@ -225,6 +225,8 @@ public class CatTest
          {
             callbacks.add("stdin");
             buffer.put("foobar".getBytes()).flip();
+
+            nuProcess.closeStdin(false);
             return false;
          }
 
@@ -421,9 +423,6 @@ public class CatTest
       public void onStdout(ByteBuffer buffer, boolean closed)
       {
          size += buffer.remaining();
-         if (size == (WRITES * bytes.length)) {
-            nuProcess.closeStdin(true);
-         }
 
          byte[] bytes = new byte[buffer.remaining()];
          buffer.get(bytes);
@@ -438,7 +437,12 @@ public class CatTest
          buffer.put(bytes);
          buffer.flip();
 
-         return (++writes < WRITES);
+         boolean writesPending = ++writes < WRITES;
+         if (!writesPending) {
+            nuProcess.closeStdin(false);
+         }
+
+         return writesPending;
       }
 
       int getExitCode()
@@ -497,10 +501,6 @@ public class CatTest
          charsRead += buffer.remaining();
          decodedStdout.append(buffer);
          buffer.position(buffer.limit());
-
-         if (forceCloseStdin && charsRead == charsWritten) {
-            nuProcess.closeStdin(true);
-         }
       }
 
       @Override
@@ -510,9 +510,9 @@ public class CatTest
             charsWritten += utf8Buffer.remaining();
             buffer.put(utf8Buffer);
             buffer.flip();
-            if (!forceCloseStdin) {
-               nuProcess.closeStdin(false);
-            }
+
+            nuProcess.closeStdin(false);
+
             return false;
          }
          else {

@@ -51,7 +51,7 @@ import java.util.concurrent.atomic.AtomicReference
 private val logger = LoggerFactory.getLogger(ProcessHandler::class.java)!!
 
 @Suppress("TooManyFunctions")
-internal class ProcessHandler(private val threadFactory: ThreadFactory, val shim: ShimProcess) {
+internal class ProcessHandler(private val threadFactory: ThreadFactory, private val shim: ShimProcess) {
     private val handlerThreadMut = AtomicReference<Thread>()
     private val stdoutPullerThreadMut = AtomicReference<Thread>()
     private val stderrPullerThreadMut = AtomicReference<Thread>()
@@ -90,12 +90,9 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, val shim
     }
 
     @Suppress(
-        "ComplexCondition",
         "CyclomaticComplexMethod",
-        "LongMethod",
         "LoopWithTooManyJumpStatements",
         "NestedBlockDepth",
-        "TooGenericExceptionCaught"
     )
     private fun doHandle() {
         val stdinBuffer = ByteBuffer.allocateDirect(Constants.BUFFER_SIZE)
@@ -121,12 +118,11 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, val shim
                         Thread.sleep(sleepInterval)
                     } catch (_: InterruptedException) {
                         poisoned.set(true)
-                        Thread.currentThread().interrupt();
+                        Thread.currentThread().interrupt()
                         break@handler
                     }
                 }
 
-                Thread.onSpinWait()
                 sleepInterval = (sleepInterval * 2) + 1
             } else {
                 sleepInterval = 0L
@@ -135,52 +131,13 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, val shim
                 var canWrite = stdInChannel.isOpen
 
                 try {
-                    val exitValue = proc.exitValue()
-
-                    stdoutPullerThreadMut.get()?.join()
-                    stderrPullerThreadMut.get()?.join()
-
-                    shim.nuProcessHandler?.onExit(exitValue)
-                    onExit.complete(exitValue)
-
-                    shim.cleanup()
+                    tryHandleExit(proc)
                     break
                 } catch (_: IllegalThreadStateException) {
                 }
 
                 while (canWrite && wantsWrite.getAndSet(false)) {
-                    stdinBuffer.clear()
-                    var wantsWriteCont = false
-                    var doWrite = false
-
-                    try {
-                        wantsWriteCont = shim.nuProcessHandler?.onStdinReady(stdinBuffer) ?: false
-                        doWrite = true
-                    } catch (x: Exception) {
-                        if (logger.isWarnEnabled)
-                            logger.warn("Exception caught in onStdinReady for $shim", x)
-                    }
-
-                    if (doWrite) {
-                        if (logger.isDebugEnabled)
-                            logger.debug("Writing {} bytes for {}", stdinBuffer.remaining(), shim)
-
-                        var bytesWritten: Int
-
-                        do {
-                            bytesWritten = try {
-                                stdInChannel.write(stdinBuffer)
-                            } catch (x: IOException) {
-                                if (logger.isDebugEnabled)
-                                    logger.debug("Failed to write for $shim", x)
-
-                                canWrite = false
-                                -1
-                            }
-                        } while (stdinBuffer.hasRemaining() && bytesWritten > -1)
-
-                        wantsWrite.compareAndSet(false, wantsWriteCont && canWrite)
-                    }
+                    canWrite = writeHandlerProvidedData(stdinBuffer)
                 }
 
                 val queuedData = queuedWrites.get()?.removeFirstOrNull()
@@ -201,6 +158,56 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, val shim
 
         if (!destroyed.get() && !poisoned.get() && !onExit.isDone)
             startHandlerThreadIfRequired()
+    }
+
+    @Suppress("NestedBlockDepth", "TooGenericExceptionCaught")
+    private fun writeHandlerProvidedData(buffer: ByteBuffer): Boolean {
+        var canWrite = true
+
+        buffer.clear()
+
+        var wantsWriteCont = false
+        var doWrite = false
+
+        try {
+            wantsWriteCont = shim.nuProcessHandler?.onStdinReady(buffer) ?: false
+            doWrite = true
+        } catch (x: Exception) {
+            if (logger.isWarnEnabled)
+                logger.warn("Exception caught in onStdinReady for $shim", x)
+        }
+
+        if (doWrite) {
+            var bytesWritten: Int
+
+            do {
+                bytesWritten = try {
+                    stdInChannel.write(buffer)
+                } catch (x: IOException) {
+                    if (logger.isDebugEnabled)
+                        logger.debug("Failed to write for $shim", x)
+
+                    canWrite = false
+                    -1
+                }
+            } while (buffer.hasRemaining() && bytesWritten > -1)
+
+            wantsWrite.compareAndSet(false, wantsWriteCont && canWrite)
+        }
+
+        return canWrite
+    }
+
+    private fun tryHandleExit(proc: Process) {
+        val exitValue = proc.exitValue()
+
+        stdoutPullerThreadMut.get()?.join()
+        stderrPullerThreadMut.get()?.join()
+
+        shim.nuProcessHandler?.onExit(exitValue)
+        onExit.complete(exitValue)
+
+        shim.cleanup()
     }
 
     fun setProcess(process: Process) {
@@ -249,9 +256,6 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, val shim
             else
                 buffer.position(buffer.position() + bytesRead)
 
-            if (logger.isDebugEnabled)
-                logger.debug("Read {} bytes (stdout) for {}", bytesRead, shim)
-
             buffer.flip()
 
             try {
@@ -280,9 +284,6 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, val shim
                 canRead = false
             else
                 buffer.position(buffer.position() + bytesRead)
-
-            if (logger.isDebugEnabled)
-                logger.debug("Read {} bytes (stderr) for {}", bytesRead, shim)
 
             buffer.flip()
 

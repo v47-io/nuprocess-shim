@@ -228,7 +228,7 @@ public class NuProcessBuilder
    {
       ensureNoNullCharacters(command);
       ensureListener();
-      String[] env = prepareEnvironment();
+      Map<String, String> env = prepareEnvironment();
 
       return factory.createProcess(command, env, processListener, cwd);
    }
@@ -243,7 +243,7 @@ public class NuProcessBuilder
    {
       ensureNoNullCharacters(command);
       ensureListener();
-      String[] env = prepareEnvironment();
+      Map<String, String> env = prepareEnvironment();
 
       factory.runProcess(command, env, processListener, cwd);
    }
@@ -269,18 +269,13 @@ public class NuProcessBuilder
       }
    }
 
-   private String[] prepareEnvironment()
+   private Map<String, String> prepareEnvironment()
    {
-      String[] env = new String[environment.size()];
-      int i = 0;
       for (Entry<String, String> entrySet : environment.entrySet()) {
-         String key = entrySet.getKey();
-         String value = entrySet.getValue();
-         ensureNoNullCharacters(key);
-         ensureNoNullCharacters(value);
-         env[i++] = key + "=" + value;
+         ensureNoNullCharacters(entrySet.getKey());
+         ensureNoNullCharacters(entrySet.getValue());
       }
-
-      return env;
+      
+      return environment;
    }
 }

@@ -45,7 +45,7 @@ internal class ShimProcessFactory : NuProcessFactory {
 
     override fun createProcess(
         commands: MutableList<String>,
-        env: Array<out String>,
+        env: MutableMap<String, String>,
         processListener: NuProcessHandler?,
         cwd: Path?
     ): NuProcess {
@@ -62,7 +62,7 @@ internal class ShimProcessFactory : NuProcessFactory {
 
     override fun runProcess(
         commands: MutableList<String>,
-        env: Array<out String>,
+        env: MutableMap<String, String>,
         processListener: NuProcessHandler?,
         cwd: Path?
     ) {
@@ -77,19 +77,14 @@ internal class ShimProcessFactory : NuProcessFactory {
 
     private fun createProcessBuilder(
         commands: List<String>,
-        env: Array<out String>,
+        env: Map<String, String>,
         cwd: Path?
     ) =
         ProcessBuilder().apply {
             command(commands)
 
             environment().clear()
-            environment().putAll(
-                env.associate { keyVal ->
-                    val splitVal = keyVal.split('=', limit = 2)
-                    splitVal[0] to splitVal[1]
-                }
-            )
+            environment().putAll(env)
 
             if (cwd != null)
                 directory(cwd.toFile())

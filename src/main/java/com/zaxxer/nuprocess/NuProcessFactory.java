@@ -18,6 +18,7 @@ package com.zaxxer.nuprocess;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 /**
  * <b>This is an internal class.</b> Instances of this interface create and
@@ -27,7 +28,7 @@ import java.util.List;
  */
 public interface NuProcessFactory
 {
-   NuProcess createProcess(List<String> commands, String[] env, NuProcessHandler processListener, Path cwd);
+   NuProcess createProcess(List<String> commands, Map<String, String> env, NuProcessHandler processListener, Path cwd);
 
    /**
     * Runs the process synchronously.
@@ -36,5 +37,5 @@ public interface NuProcessFactory
     *
     * @since 1.3
     */
-   void runProcess(List<String> commands, String[] env, NuProcessHandler processListener, Path cwd);
+   void runProcess(List<String> commands, Map<String, String> env, NuProcessHandler processListener, Path cwd);
 }

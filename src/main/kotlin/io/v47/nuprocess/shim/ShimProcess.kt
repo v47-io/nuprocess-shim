@@ -41,12 +41,15 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.io.path.Path
 
-@Suppress("TooGenericExceptionCaught", "TooManyFunctions")
+@Suppress("TooManyFunctions")
 internal class ShimProcess(
     threadFactory: ThreadFactory,
     var nuProcessHandler: NuProcessHandler?
 ) : NuProcess {
+    private var stringRepr: String? = null
+
     private val process = AtomicReference<Process>()
     private val processHandler = ProcessHandler(threadFactory, this)
 
@@ -67,6 +70,8 @@ internal class ShimProcess(
     }
 
     private fun startProcessInternal(jProcessBuilder: ProcessBuilder): Process? {
+        stringRepr = super.toString() + "[${Path(jProcessBuilder.command().first()).fileName}]"
+
         nuProcessHandler?.onPreStart(this)
 
         val proc = try {
@@ -126,4 +131,7 @@ internal class ShimProcess(
         processHandler.cleanup()
         process.set(null)
     }
+
+    override fun toString() =
+        stringRepr ?: super.toString()
 }

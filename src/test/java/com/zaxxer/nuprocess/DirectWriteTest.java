@@ -118,9 +118,7 @@ public class DirectWriteTest
          nuProcess.writeStdin(buffer);
       }
 
-      Thread.sleep(500);
-
-      nuProcess.closeStdin(true);
+      nuProcess.closeStdin(false);
       nuProcess.waitFor(20, TimeUnit.SECONDS);
       Assert.assertEquals("Count did not match", 14000, count.get());
    }

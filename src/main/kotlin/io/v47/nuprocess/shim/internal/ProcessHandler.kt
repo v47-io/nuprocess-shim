@@ -35,18 +35,19 @@
 package io.v47.nuprocess.shim.internal
 
 import io.v47.nuprocess.shim.ShimProcess
-import io.v47.nuprocess.shim.utils.Constants
 import org.slf4j.LoggerFactory
-import java.io.IOException
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.channels.WritableByteChannel
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+
+private const val BUFFER_SIZE = 65535
 
 private val logger = LoggerFactory.getLogger(ProcessHandler::class.java)!!
 
@@ -63,10 +64,10 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
 
     private val onExit = CompletableFuture<Int>()
     private val wantsWrite = AtomicBoolean(false)
-    private val queuedWrites = AtomicReference<MutableList<ByteBuffer>>()
+    private val queuedWrites = ConcurrentLinkedDeque<ByteBuffer>()
 
     val hasPendingWrites
-        get() = wantsWrite.get() || !queuedWrites.get().isNullOrEmpty()
+        get() = wantsWrite.get() || queuedWrites.isNotEmpty()
 
     private fun startHandlerThread() {
         handlerThreadMut.updateAndGet { existing ->
@@ -82,11 +83,10 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
     }
 
     private fun doHandle() {
-        val stdinBuffer = ByteBuffer.allocateDirect(Constants.BUFFER_SIZE)
+        val stdinBuffer = ByteBuffer.allocateDirect(BUFFER_SIZE)
 
         handler@ while (!Thread.interrupted()) {
             val proc = processMut.get()
-            var canWrite = stdInChannel.isOpen
 
             try {
                 tryHandleExit(proc)
@@ -94,12 +94,12 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
             } catch (_: IllegalThreadStateException) {
             }
 
-            while (canWrite && wantsWrite.getAndSet(false)) {
-                canWrite = writeHandlerProvidedData(stdinBuffer)
+            while (wantsWrite.getAndSet(false)) {
+                writeHandlerProvidedData(stdinBuffer)
             }
 
-            val queuedData = queuedWrites.get()?.removeFirstOrNull()
-            if (canWrite && queuedData != null) {
+            val queuedData = queuedWrites.poll()
+            if (queuedData != null) {
                 var bytesWritten: Int
 
                 do {
@@ -107,26 +107,22 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
                 } while (queuedData.hasRemaining() && bytesWritten > -1)
             }
 
-            if (queuedWrites.get().isNullOrEmpty() && !wantsWrite.get() && stdInClosedMut.get())
+            if (queuedWrites.isEmpty() && !wantsWrite.get() && stdInClosedMut.get())
                 stdInChannel.close()
         }
-
-        handlerThreadMut.set(null)
     }
 
-    @Suppress("NestedBlockDepth", "TooGenericExceptionCaught")
-    private fun writeHandlerProvidedData(buffer: ByteBuffer): Boolean {
-        var canWrite = true
-
+    @Suppress("NestedBlockDepth")
+    private fun writeHandlerProvidedData(buffer: ByteBuffer) {
         buffer.clear()
 
         var wantsWriteCont = false
         var doWrite = false
 
-        try {
+        runCatching {
             wantsWriteCont = shim.nuProcessHandler?.onStdinReady(buffer) ?: false
             doWrite = true
-        } catch (x: Exception) {
+        }.onFailure { x ->
             if (logger.isWarnEnabled)
                 logger.warn("Exception caught in onStdinReady for $shim", x)
         }
@@ -135,21 +131,11 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
             var bytesWritten: Int
 
             do {
-                bytesWritten = try {
-                    stdInChannel.write(buffer)
-                } catch (x: IOException) {
-                    if (logger.isDebugEnabled)
-                        logger.debug("Failed to write for $shim", x)
-
-                    canWrite = false
-                    -1
-                }
+                bytesWritten = stdInChannel.write(buffer)
             } while (buffer.hasRemaining() && bytesWritten > -1)
 
-            wantsWrite.compareAndSet(false, wantsWriteCont && canWrite)
+            wantsWrite.compareAndSet(false, wantsWriteCont)
         }
-
-        return canWrite
     }
 
     private fun tryHandleExit(proc: Process) {
@@ -180,13 +166,13 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
     private fun startPullerThread(
         ref: AtomicReference<Thread>,
         stream: InputStream,
-        pull: (AtomicReference<Thread>, InputStream) -> Unit
+        pull: (InputStream) -> Unit
     ) {
         ref.updateAndGet { existing ->
             check(existing?.isAlive != true) { "startPullerThread ($stream) called repeatedly" }
 
             threadFactory.newThread {
-                pull(ref, stream)
+                pull(stream)
             }.also {
                 it.isDaemon = true
                 it.start()
@@ -194,9 +180,8 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    private fun pullStdOut(ref: AtomicReference<Thread>, input: InputStream) {
-        val buffer = ByteBuffer.wrap(ByteArray(Constants.BUFFER_SIZE))
+    private fun pullStdOut(input: InputStream) {
+        val buffer = ByteBuffer.wrap(ByteArray(BUFFER_SIZE))
         var canRead = true
 
         puller@ while (!Thread.interrupted() && canRead) {
@@ -208,22 +193,19 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
 
             buffer.flip()
 
-            try {
+            runCatching {
                 shim.nuProcessHandler?.onStdout(buffer, !canRead)
-            } catch (x: Exception) {
+            }.onFailure { x ->
                 if (logger.isWarnEnabled)
                     logger.warn("Exception caught in onStdout for $shim", x)
             }
 
             buffer.compact()
         }
-
-        ref.set(null)
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    private fun pullStdErr(ref: AtomicReference<Thread>, input: InputStream) {
-        val buffer = ByteBuffer.wrap(ByteArray(Constants.BUFFER_SIZE))
+    private fun pullStdErr(input: InputStream) {
+        val buffer = ByteBuffer.wrap(ByteArray(BUFFER_SIZE))
         var canRead = true
 
         puller@ while (!Thread.interrupted() && canRead) {
@@ -235,17 +217,15 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
 
             buffer.flip()
 
-            try {
+            runCatching {
                 shim.nuProcessHandler?.onStderr(buffer, !canRead)
-            } catch (x: Exception) {
+            }.onFailure { x ->
                 if (logger.isWarnEnabled)
                     logger.warn("Exception caught in onStderr for $shim", x)
             }
 
             buffer.compact()
         }
-
-        ref.set(null)
     }
 
     fun wantWrite() {
@@ -253,14 +233,7 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
     }
 
     fun queueWrite(buffer: ByteBuffer) {
-        if (!stdInClosedMut.get()) {
-            queuedWrites.updateAndGet { existing ->
-                val actual = existing ?: mutableListOf()
-                actual += buffer
-
-                actual
-            }
-        }
+        queuedWrites.addLast(buffer)
     }
 
     fun stopWriting(force: Boolean) {
@@ -286,7 +259,7 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
         if (::stdInChannel.isInitialized)
             stdInChannel.close()
 
-        queuedWrites.set(null)
+        queuedWrites.clear()
 
         processMut.set(null)
 

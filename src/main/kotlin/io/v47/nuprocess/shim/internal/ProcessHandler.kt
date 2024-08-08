@@ -98,17 +98,17 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
         val stdinBuffer = ByteBuffer.allocateDirect(Constants.BUFFER_SIZE)
 
         var sleepInterval = 0L
-        var idleTimeout = 0L
+        var startTimeout = 0L
 
         handler@ while (!Thread.interrupted()) {
             val proc = processMut.get()
             if (proc == null) {
-                if (idleTimeout == 0L) {
+                if (startTimeout == 0L) {
                     sleepInterval = 0L
-                    idleTimeout = System.currentTimeMillis() + Constants.LINGER_TIME_MS
+                    startTimeout = System.currentTimeMillis() + Constants.PROCESS_START_TIMEOUT_MILLIS
                 }
 
-                if (System.currentTimeMillis() >= idleTimeout) {
+                if (System.currentTimeMillis() >= startTimeout) {
                     poisoned.set(true)
                     break@handler
                 }
@@ -126,7 +126,7 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
                 sleepInterval = (sleepInterval * 2) + 1
             } else {
                 sleepInterval = 0L
-                idleTimeout = 0L
+                startTimeout = 0L
 
                 var canWrite = stdInChannel.isOpen
 

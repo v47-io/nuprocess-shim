@@ -34,19 +34,7 @@
  */
 package io.v47.nuprocess.shim.utils
 
-private const val DEFAULT_LINGER_TIME_MS = 2500
-
 internal object Constants {
     val BUFFER_SIZE = UShort.MAX_VALUE.toInt()
-    val LINGER_TIME_MS = computeLingerTime()
-}
-
-private fun computeLingerTime(): Int {
-    val setting = System.getProperty("com.zaxxer.nuprocess.lingerTimeMs", "2500")
-    val settingAsInt = setting.toIntOrNull()
-
-    return if (settingAsInt != null && settingAsInt > 0)
-        settingAsInt
-    else
-        DEFAULT_LINGER_TIME_MS
+    const val PROCESS_START_TIMEOUT_MILLIS = 2500
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * The Clear BSD License
  *
  * Copyright (c) 2024, Alex Katlein <dev@vemilyus.com>

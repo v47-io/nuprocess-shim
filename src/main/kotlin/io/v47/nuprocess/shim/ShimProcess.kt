@@ -58,7 +58,7 @@ internal class ShimProcess(
 
     fun run(jProcessBuilder: ProcessBuilder) {
         startProcessInternal(jProcessBuilder)
-        processHandler.waitForExit(0, null)
+        processHandler.waitForExit(0, TimeUnit.SECONDS)
     }
 
     private fun startProcessInternal(jProcessBuilder: ProcessBuilder): Process? {
@@ -79,7 +79,7 @@ internal class ShimProcess(
         return proc
     }
 
-    override fun waitFor(timeout: Long, timeUnit: TimeUnit?) =
+    override fun waitFor(timeout: Long, timeUnit: TimeUnit) =
         processHandler.waitForExit(timeout, timeUnit)
 
     override fun wantWrite() {

@@ -326,8 +326,8 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
             stdInClosedMut.set(true)
     }
 
-    fun waitForExit(timeout: Long, unit: TimeUnit?): Int =
-        if (unit != null)
+    fun waitForExit(timeout: Long, unit: TimeUnit): Int =
+        if (timeout > 0)
             onExit.get(timeout, unit)
         else
             onExit.get()

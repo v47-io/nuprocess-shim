@@ -37,6 +37,12 @@ kotlin {
     jvmToolchain(21)
 }
 
+tasks.compileJava {
+    options.compilerArgumentProviders.add(CommandLineArgumentProvider {
+        listOf("--patch-module", "com.zaxxer.nuprocess=${sourceSets["main"].output.asPath}")
+    })
+}
+
 tasks.test {
     useJUnit()
 }

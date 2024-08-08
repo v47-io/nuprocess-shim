@@ -58,7 +58,12 @@ internal class ShimProcess(
 
     fun run(jProcessBuilder: ProcessBuilder) {
         startProcessInternal(jProcessBuilder)
-        processHandler.waitForExit(0, TimeUnit.SECONDS)
+
+        try {
+            processHandler.waitForExit(0, TimeUnit.SECONDS)
+        } catch (x: InterruptedException) {
+            destroy(true)
+        }
     }
 
     private fun startProcessInternal(jProcessBuilder: ProcessBuilder): Process? {
@@ -117,7 +122,7 @@ internal class ShimProcess(
     override fun getPID() =
         process.get()?.pid()?.toInt() ?: exitValue
 
-    fun cleanup() {
+    internal fun cleanup() {
         processHandler.cleanup()
         process.set(null)
     }

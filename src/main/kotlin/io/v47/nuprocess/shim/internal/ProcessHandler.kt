@@ -65,20 +65,12 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
     private val wantsWrite = AtomicBoolean(false)
     private val queuedWrites = AtomicReference<MutableList<ByteBuffer>>()
 
-    private val poisoned = AtomicBoolean(false)
-    private val destroyed = AtomicBoolean(false)
-
     val hasPendingWrites
         get() = wantsWrite.get() || !queuedWrites.get().isNullOrEmpty()
 
-    init {
-        startHandlerThreadIfRequired()
-    }
-
-    private fun startHandlerThreadIfRequired() {
+    private fun startHandlerThread() {
         handlerThreadMut.updateAndGet { existing ->
-            if (existing?.isAlive == true)
-                return@updateAndGet existing
+            check(existing?.isAlive != true) { "startHandlerThread called repeatedly" }
 
             threadFactory.newThread {
                 doHandle()
@@ -89,75 +81,37 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
         }
     }
 
-    @Suppress(
-        "CyclomaticComplexMethod",
-        "LoopWithTooManyJumpStatements",
-        "NestedBlockDepth",
-    )
     private fun doHandle() {
         val stdinBuffer = ByteBuffer.allocateDirect(Constants.BUFFER_SIZE)
 
-        var sleepInterval = 0L
-        var startTimeout = 0L
-
         handler@ while (!Thread.interrupted()) {
             val proc = processMut.get()
-            if (proc == null) {
-                if (startTimeout == 0L) {
-                    sleepInterval = 0L
-                    startTimeout = System.currentTimeMillis() + Constants.PROCESS_START_TIMEOUT_MILLIS
-                }
+            var canWrite = stdInChannel.isOpen
 
-                if (System.currentTimeMillis() >= startTimeout) {
-                    poisoned.set(true)
-                    break@handler
-                }
-
-                if (sleepInterval > 0L) {
-                    try {
-                        Thread.sleep(sleepInterval)
-                    } catch (_: InterruptedException) {
-                        poisoned.set(true)
-                        Thread.currentThread().interrupt()
-                        break@handler
-                    }
-                }
-
-                sleepInterval = (sleepInterval * 2) + 1
-            } else {
-                sleepInterval = 0L
-                startTimeout = 0L
-
-                var canWrite = stdInChannel.isOpen
-
-                try {
-                    tryHandleExit(proc)
-                    break
-                } catch (_: IllegalThreadStateException) {
-                }
-
-                while (canWrite && wantsWrite.getAndSet(false)) {
-                    canWrite = writeHandlerProvidedData(stdinBuffer)
-                }
-
-                val queuedData = queuedWrites.get()?.removeFirstOrNull()
-                if (canWrite && queuedData != null) {
-                    var bytesWritten: Int
-
-                    do {
-                        bytesWritten = stdInChannel.write(queuedData)
-                    } while (queuedData.hasRemaining() && bytesWritten > -1)
-                }
-
-                if (queuedWrites.get().isNullOrEmpty() && !wantsWrite.get() && stdInClosedMut.get())
-                    stdInChannel.close()
+            try {
+                tryHandleExit(proc)
+                break
+            } catch (_: IllegalThreadStateException) {
             }
+
+            while (canWrite && wantsWrite.getAndSet(false)) {
+                canWrite = writeHandlerProvidedData(stdinBuffer)
+            }
+
+            val queuedData = queuedWrites.get()?.removeFirstOrNull()
+            if (canWrite && queuedData != null) {
+                var bytesWritten: Int
+
+                do {
+                    bytesWritten = stdInChannel.write(queuedData)
+                } while (queuedData.hasRemaining() && bytesWritten > -1)
+            }
+
+            if (queuedWrites.get().isNullOrEmpty() && !wantsWrite.get() && stdInClosedMut.get())
+                stdInChannel.close()
         }
 
         handlerThreadMut.set(null)
-
-        if (!destroyed.get() && !poisoned.get() && !onExit.isDone)
-            startHandlerThreadIfRequired()
     }
 
     @Suppress("NestedBlockDepth", "TooGenericExceptionCaught")
@@ -211,29 +165,25 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
     }
 
     fun setProcess(process: Process) {
-        if (poisoned.get()) {
-            process.destroyForcibly()
-            error("ProcessHandler poisoned for $shim")
-        }
+        processMut.set(process)
 
         stdInChannel = Channels.newChannel(process.outputStream)
 
-        startPullerThreadIfRequired(stdoutPullerThreadMut, process.inputStream, ::pullStdOut)
-        startPullerThreadIfRequired(stderrPullerThreadMut, process.errorStream, ::pullStdErr)
+        startPullerThread(stdoutPullerThreadMut, process.inputStream, ::pullStdOut)
+        startPullerThread(stderrPullerThreadMut, process.errorStream, ::pullStdErr)
 
         shim.nuProcessHandler?.onStart(shim)
 
-        processMut.set(process)
+        startHandlerThread()
     }
 
-    private fun startPullerThreadIfRequired(
+    private fun startPullerThread(
         ref: AtomicReference<Thread>,
         stream: InputStream,
         pull: (AtomicReference<Thread>, InputStream) -> Unit
     ) {
         ref.updateAndGet { existing ->
-            if (existing?.isAlive == true)
-                return@updateAndGet existing
+            check(existing?.isAlive != true) { "startPullerThread ($stream) called repeatedly" }
 
             threadFactory.newThread {
                 pull(ref, stream)
@@ -269,8 +219,6 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
         }
 
         ref.set(null)
-        if (!destroyed.get() && canRead)
-            startPullerThreadIfRequired(ref, input, ::pullStdOut)
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -298,8 +246,6 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
         }
 
         ref.set(null)
-        if (!destroyed.get() && canRead)
-            startPullerThreadIfRequired(ref, input, ::pullStdErr)
     }
 
     fun wantWrite() {
@@ -333,7 +279,6 @@ internal class ProcessHandler(private val threadFactory: ThreadFactory, private 
             onExit.get()
 
     fun cleanup() {
-        destroyed.set(true)
         handlerThreadMut.getAndSet(null)?.interrupt()
 
         stdInClosedMut.set(true)

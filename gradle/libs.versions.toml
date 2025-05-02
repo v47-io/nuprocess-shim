@@ -1,23 +1,24 @@
 [versions]
-detekt = "1.23.6"
-dokka = "1.9.20"
+detekt = "1.23.8"
+dokka = "2.0.0"
 hamcrest = "2.2"
 junit = "4.13.2"
 license = "0.16.1"
-logback = "1.5.6"
-release = "3.0.2"
-remal-gradle-plugins = "1.9.2"
-slf4j = "2.0.13"
+logback = "1.5.18"
+nmcp-maven-publish = "0.31.0"
+release = "3.1.0"
+slf4j = "2.0.17"
 
 [libraries]
 hamcrest = { module = "org.hamcrest:hamcrest", version.ref = "hamcrest" }
 junit = { module = "junit:junit", version.ref = "junit" }
 logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
-remalGradlePlugins = { module = "name.remal:gradle-plugins", version.ref = "remal-gradle-plugins" }
 slf4j = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 
 [plugins]
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
+dokka-javadoc = { id = "org.jetbrains.dokka-javadoc", version.ref = "dokka" }
 license = { id = "com.github.hierynomus.license", version.ref = "license" }
+nmcp-maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "nmcp-maven-publish" }
 release = { id = "net.researchgate.release", version.ref = "release" }
